@@ -3,7 +3,8 @@
 # convert templates into exchange/routing key
 ###############################################################################
 
-_ = require("lodash")
+flatten = require("lodash.flatten")
+clone = require("lodash.clone")
 
 Template = require("./Template")
 Syntax = require("./Syntax")
@@ -27,14 +28,14 @@ module.exports = class Route
   # instances directly, but Publisher/Consumer will still need them.
   # 
   # Methods to read the arbitrary options of the template pieces
-  exchangeOptions: () -> _.clone(@tplEx.opts)
-  routeOptions: () -> _.clone(@tplRk.opts)
+  exchangeOptions: () -> clone(@tplEx.opts)
+  routeOptions: () -> clone(@tplRk.opts)
   # Methos to read raw template source
   exchangeTemplate: () -> @tplEx.template
   routeTemplate: () -> @tplRk.template
   # Static method to read possible lots of routes
   @read: (args...) ->
-    args = _.flatten(args)
+    args = flatten(args)
     routes = []
     # Interpret the Exchange+Bindings
     bindings = args.map((s) -> Syntax.ExchangeRoute.exec(s)).filter((s) -> !!s)

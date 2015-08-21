@@ -2,7 +2,7 @@
 # Wrapper for consuming messages
 ###############################################################################
 
-async = require("async")
+When = require("when")
 Syntax = require("./Syntax")
 Route = require("./Route")
 
@@ -16,47 +16,42 @@ module.exports = class Consumer
     @routes = Route.read(@spec.routes)
     @subscriptions = []
   # Creates a dynamic queue (if not existing), and always subscribes to it
-  dynamic: (done) ->
-    if not @channel then return done(new Error("Channel not ready"))
-    if @dynamicQueue then return done(null, @dynamicQueue)
-    qOpts = {exclusive: true, durable: false, autoDelete: true}
-    # Always subscribe to our callback handler, even before binding
-    @channel.assertQueue "", qOpts, (err, ok) =>
-      return done(err) if err
-      @dynamicQueue = ok
-      sOpts = {noAck: true}
-      @channel.consume(ok.queue, @callMethod.bind(@), sOpts, @consumed(done))
+  dynamic: () ->
+    @connect().then((ch) =>
+      qOpts = {exclusive: true, durable: false, autoDelete: true}
+      # Always subscribe to our callback handler, even before binding
+      @dynamicQueue ?= ch.assertQueue("", qOpts)
+      @dynamicQueue.then((ok) =>
+        sOpts = {noAck: true}
+        ch.consume(ok.queue, @callMethod.bind(@), sOpts)
+      ).then((sub) =>
+        @subscriptions.push(sub)
+      )
+      return @dynamicQueue
+    )
+  connect: () -> @channel ?= @pool.acquire()
   # Acquires a channel for consumption and keeps until deactivated
-  activate: (cb) ->
-    if @channel then return cb()
-    @pool.acquire (err, channel) =>
-      return cb(err) if err
-      @channel = channel
-      #console.log("Connection %s; Consumer %s; got Channel %s", @pool.connectionId, @id, @channel.ch)
-      async.map(@routes, @addRoute.bind(@), cb)
+  activate: () -> When.all((@addRoute(route) for route in @routes))
   # Adds a Route (either Queue or Exchange/Binding to dynamic Queue)
-  addRoute:  (route, done) ->
-    if not @channel then return done(new Error("Channel not ready"))
-    # TODO: Consumer routes should not allow templates!
-    exchange = route.exchangeTemplate()
-    route = route.routeTemplate()
-    if Syntax.Template.test(route)
-      return done(new Error("Invalid consumption route '#{route}'"))
-    # Queue: subscribe directly to it
-    if not exchange
-      @channel.consume(route, @callMethod.bind(@), {}, @consumed(done))
-    # It is an exchange, create/bind Queue
-    else
+  addRoute:  (route) ->
+    @connect().then((ch) =>
+      # TODO: Consumer routes should not allow templates!
+      exchange = route.exchangeTemplate()
+      route = route.routeTemplate()
+      if Syntax.Template.test(route)
+        throw new Error("Invalid consumption route '#{route}'")
+      # Queue: subscribe directly to it
+      if not exchange
+        return ch.consume(route, @callMethod.bind(@)).then((sub) =>
+          @subscriptions.push(sub)
+        )
+      # It is an exchange, create/bind Queue
       if Syntax.Template.test(exchange)
-        return done(new Error("Invalid Exchange '#{exchange}'"))
-      @dynamic (err, ok) =>
-        @channel.bindQueue(ok.queue, exchange, route, {}, done)
-  # Keeps track of our consumer tags for later deactivation
-  consumed: (cb) ->
-    return (err, ok) =>
-      #console.log("Connection %s; Consumer %s; Channel %s, cTag %s", @pool.connectionId, @id, @channel.ch, ok.consumerTag)
-      @subscriptions.push(ok) if ok?
-      cb(err, ok)
+        throw new Error("Invalid Exchange '#{exchange}'")
+      return @dynamic().then((ok) =>
+        ch.bindQueue(ok.queue, exchange, route)
+      )
+    )
 
   # Wrapper for the method call
   callMethod: (msg) ->
@@ -70,16 +65,17 @@ module.exports = class Consumer
       console.error(e, e.stack)
   # Wrappper for the acknowlegement
   ack: (msg) ->
-    @channel.acknowledge(msg)
+    @connect().then((ch) ->
+      ch.acknowledge(msg)
+    )
 
   # Stop consuming, shutdown, release
-  deactivate: (cb) ->
-    cancel = (sub, next) =>
-      #console.log("Connection %s; Consumer %s; Channel %s; cancel('%s')", @pool.connectionId, @id, @channel.ch, sub.consumerTag)
-      @channel.cancel(sub.consumerTag, next)
-    async.map @subscriptions, cancel, (err) =>
-      @subscriptions = []
-      #console.log("Connection %s; Consumer %s; Channel %s; released", @pool.connectionId, @id, @channel.ch)
-      @pool.release(@channel)
-      @channel = null
-      cb(err)
+  deactivate: () ->
+    @connect().then((ch) =>
+      all = (ch.cancel(sub.consumerTag) for sub in @subscriptions)
+      When.all(all).then(() =>
+        @subscriptions = []
+        @pool.release(ch)
+        @channel = null
+      )
+    )

@@ -15,16 +15,19 @@
     "scripts": {
         "prepublish": "./node_modules/.bin/coffee -o js -c src",
         "pretest": "./node_modules/.bin/coffee -o js -c src",
-        "test": "./node_modules/.bin/mocha js/test.js"
+        "test": "./node_modules/.bin/mocha --compilers coffee:coffee-script/register src/test.coffee"
     },
     "dependencies": {
         "amqplib": "^0.3.2",
         "generic-pool": "^2.2.0",
-        "lodash": "^3.10.1",
-        "mustache": "^1.2.0"
+        "lodash.assign": "^3.2.0",
+        "lodash.clone": "^3.0.3",
+        "lodash.flatten": "^3.0.2",
+        "lodash.pick": "^3.1.0",
+        "mustache": "^1.2.0",
+        "when": "^3.7.3"
     },
     "devDependencies": {
-        "async": "^1.4.2",
         "coffee-script": "^1.9.3",
         "mocha": "^2.2.5",
         "should": "^7.0.4"

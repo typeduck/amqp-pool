@@ -6,9 +6,8 @@
 # - list of named publishers (draw channels from the pool)
 ###############################################################################
 
-_  = require("lodash")
-async = require("async")
-AMQP = require("amqplib/callback_api")
+When = require("when")
+AMQP = require("amqplib")
 ChannelPool = require("./ChannelPool")
 Publisher = require("./Publisher")
 Consumer = require("./Consumer")
@@ -18,11 +17,11 @@ connectionId = 0
 module.exports = class Connection
   constructor: (@specs = {}) ->
     @id = ++connectionId
+    @url = @specs.server || "amqp://guest:guest@localhost"
     @conn = null
-    getConn = () => @conn
+    getConn = () => @connect()
     @poolConfirm = new ChannelPool(getConn, true)
     @poolNoConfirm = new ChannelPool(getConn, false)
-    @url = @specs.server || "amqp://guest:guest@localhost"
     @publishers = {}
     @publish = {} # wrapper for named publisher's publish() method
     @consumers = {}
@@ -39,46 +38,22 @@ module.exports = class Connection
   addConsumer: (name, spec) ->
     con = (@consumers[name] = new Consumer(@poolNoConfirm, spec))
   # Connects, sets up listener in case of disconnect
-  #connect: (cb) ->
-  #  AMQP.connect @url, (err, conn) =>
-  #    return cb(err) if err
-  #    (@conn = conn).on "close"
-      
+  connect: () -> @conn ?= AMQP.connect(@url)
+  disconnect: () ->
+    @conn?.then((c) =>
+      @conn = null
+      c.close()
+    )
   # sets up consumers/publishers
-  activate: (cb) ->
-    async.auto {
-      connection: (next, auto) => AMQP.connect(@url, next)
-      consumers: ["connection", (next, auto) =>
-        @conn = auto.connection
-        startConsumer = (name, done) => @consumers[name].activate(done)
-        async.map(Object.keys(@consumers), startConsumer, next)
-      ]
-    }, (err, res) => cb?.call?(@, err, res)
-    return @
+  activate: () -> When.all((con.activate() for name, con of @consumers))
   # Deactivates Consumers, Publishers, then connection
-  deactivate:  (cb) ->
+  deactivate:  () ->
     console.log("Deactivating Connection %s", @id)
-    async.auto {
-      consumers: (next, auto) =>
-        stopConsumer = (name, done) => @consumers[name].deactivate(done)
-        async.map(Object.keys(@consumers), stopConsumer, next)
-      poolNoConfirm: ["consumers", (next, auto) =>
-        @poolNoConfirm.drain () =>
-          @poolNoConfirm.destroyAllNow()
-          next()
-      ]
-      poolConfirm: (next, auto) =>
-        @poolConfirm.drain () =>
-          @poolConfirm.destroyAllNow()
-          next()
-      connection: ["poolNoConfirm", "poolConfirm", (next, auto) =>
-        @conn.on "close", () -> next()
-        @conn.close()
-        @conn = null
-      ]
-    }, (err, res) => cb?.call?(@, err, res)
-    return @
-
+    all = (con.deactivate() for name, con of @consumers)
+    all.push(@poolConfirm.drain())
+    When.all(all).then(() =>
+      @poolNoConfirm.drain()
+    ).then(() => @disconnect())
 
 # Exchange Options
 rxExchangeOpt = /(-)?([adcnp])/g

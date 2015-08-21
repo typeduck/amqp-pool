@@ -2,7 +2,7 @@
 # Given a channel pool, publishes messages using templates
 ###############################################################################
 
-async = require("async")
+When = require("when")
 Route = require("./Route")
 
 publisherId = 0
@@ -20,33 +20,33 @@ module.exports = class Publisher
   publish: (message, args...) ->
     done = null
     messageId = ++@messageId
-    tplData = null
-    for arg in args when arg?
-      if typeof arg is "function" then done = arg
-      if typeof arg is "object" then tplData = arg
+    isConfirm = false
     # by default use the message itself to create routing key
-    tplData ?= message
-    # Determine the type of pool needed
-    isConfirm = typeof done is "function"
-    pool = if isConfirm then @certain else @uncertain
+    tplData = message
+    for arg in args when arg?
+      if typeof arg is "boolean" then isConfirm = arg
+      if typeof arg is "object" then tplData = arg
+    # Prepare the message
+    exchange = @route.exchange(tplData)
+    rKey = @route.route(tplData)
+    content = new Buffer(JSON.stringify(message), "utf8")
+    pOpts =
+      contentType: "application/json"
+      contentEncoding: "UTF-8"
     # Acquire the channel and publish message
-    pool.acquire (err, channel) =>
-      return done?(err) if err
-      # Prepare the message
-      exchange = @route.exchange(tplData)
-      rKey = @route.route(tplData)
-      content = new Buffer(JSON.stringify(message), "utf8")
-      pOpts =
-        contentType: "application/json"
-        contentEncoding: "UTF-8"
+    pool = if isConfirm then @certain else @uncertain
+    pool.acquire().then((channel) ->
       # Non-Confirm mode: immediately release the Channel
       if not isConfirm
         channel.publish(exchange, rKey, content, pOpts)
         return pool.release(channel)
-      # Confirm Mode: setup error handler/ACK handler
-      onDone = (err, results) =>
-        channel.removeListener("error", onDone)
-        pool.release(channel)
-        done?(err, results)
-      channel.on("error", onDone)
-      channel.publish(exchange, rKey, content, pOpts, onDone)
+      # Confirm Mode: setup error handler/ACK handler. Seems that
+      # amqplib.Channel.publish does NOT offer a Promise-based callback.
+      When.promise (resolve, reject) ->
+        onDone = (err, ok) ->
+          channel.removeListener("error", onDone)
+          pool.release(channel)
+          if err then reject(err) else resolve(ok)
+        channel.publish(exchange, rKey, content, pOpts, onDone)
+        channel.on("error", onDone)
+    )

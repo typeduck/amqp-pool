@@ -2,7 +2,6 @@
 # Variable Lookup template
 ###############################################################################
 
-_ = require("lodash")
 Mustache = require("mustache")
 Syntax = require("./Syntax")
 

@@ -4,35 +4,31 @@
 
 should = require("should")
 pool = require("./index")
-AMQP = require("amqplib/callback_api")
-async = require("async")
-_ = require("lodash")
+AMQP = require("amqplib")
+assign = require("lodash.assign")
+When = require("when")
 
 # HELPER METHODS FOR before/after test suite
 setupLife = (setup) ->
   return (done) ->
-    async.auto {
-      conn: (next, auto) ->
-        AMQP.connect(next)
-      channel: ["conn", (next, auto) ->
-        auto.conn.createConfirmChannel(next)
-      ]
-      animalia: ["channel", (next, auto) ->
-        auto.channel.assertExchange("Animalia", "topic", {}, next)
-      ]
-      plantae: ["channel", (next, auto) ->
-        auto.channel.assertExchange("Plantae", "topic", {}, next)
-      ]
-    }, (err, res) -> done(err, _.assign(setup, res))
+    AMQP.connect().then((conn) ->
+      setup.conn = conn
+      conn.createConfirmChannel()
+    ).then((ch) ->
+      setup.channel = ch
+      When.all([
+        ch.assertExchange("Animalia", "topic")
+        ch.assertExchange("Plantae", "topic")
+      ]).then(() -> done())
+    ).catch(done)
 removeLife = (setup) ->
   return (done) ->
-    return done() if not setup
-    async.series [
-      (next) -> setup.channel.deleteExchange("Animalia", {}, next)
-      (next) -> setup.channel.deleteExchange("Plantae", {}, next)
-      (next) -> setup.channel.close(next)
-      (next) -> setup.conn.close(next)
-    ], done
+    When.all([
+      setup.channel.deleteExchange("Animalia")
+      setup.channel.deleteExchange("Plantae")
+    ]).then(() -> setup.channel.close()
+    ).then(() -> setup.conn.close()
+    ).then(done).catch(done)
 
 ###############################################################################
 # Tests that we can make a connection
@@ -44,11 +40,16 @@ describe "Connection", () ->
   after(removeLife(setup))
   # Creates another (default) connection
   it "should be able to create default connection", (done) ->
-    pool().activate () -> @deactivate(done)
+    mypool = pool()
+    mypool.activate().then(() ->
+      mypool.deactivate()
+    ).then(() -> done()).catch(done)
   # Creates explicit connection
   it "should be able to accept server URL", (done) ->
-    pool({server: "amqp://guest:guest@localhost"}).activate () ->
-      @deactivate(done)
+    mypool = pool({server: "amqp://guest:guest@localhost"})
+    mypool.activate().then(() ->
+      mypool.deactivate()
+    ).then(() -> done()).catch(done)
 
 # Tests only the route templating
 describe "Route [internal]", () ->
@@ -153,7 +154,8 @@ describe "Publisher", ()  ->
       o.genus.should.equal("Homo")
       o.species.should.equal("sapiens")
       countDown -= msg.json.id
-      if countDown is 0 then P.deactivate(done)
+      if countDown is 0
+        P.deactivate().then(done).catch(done)
     P = pool({
       maxChannels: 8
       publishers:
@@ -169,10 +171,10 @@ describe "Publisher", ()  ->
           routes: "Animalia/#"
           method: gotMessage
     })
-    P.activate (err, res) ->
+    P.activate().then(() ->
       # publish a bunch of humans ;-)
       for i in [1..maxHumans]
-        @publish.life({
+        P.publish.life({
           kingdom: "Animalia"
           phylum: "Chordata"
           class: "Mammalia"
@@ -182,6 +184,7 @@ describe "Publisher", ()  ->
           species: "sapiens"
           id: i
         })
+    )
 
   # Test that publishing one bad route does not corrupt another
   it "should multi-route publisher must continue in face of errors",  (done) ->
@@ -191,7 +194,8 @@ describe "Publisher", ()  ->
       o = msg.json
       o.kingdom.should.equal("Animalia")
       countDown -= msg.json.id
-      if countDown is 0 then P.deactivate(done)
+      if countDown is 0
+        P.deactivate().then(done).catch(done)
     P = pool({
       publishers:
         life: "{{kingdom}}/{{phylum}}.{{class}}.{{order}}.{{family}}.{{genus}}.{{species}}"
@@ -200,10 +204,10 @@ describe "Publisher", ()  ->
         living:
           routes: "Animalia/#"
           method: gotMessage
-    }).activate (err) ->
-      return done(err) if err
+    })
+    P.activate().then(() ->
       for i in [1..maxAnimals]
-        @publish.life({
+        P.publish.life({
           kingdom: "Animalia"
           phylum: "Chordata"
           class: "Mammalia"
@@ -212,8 +216,8 @@ describe "Publisher", ()  ->
           genus: "Homo"
           species: "sapiens"
           id: i
-        }, ((e) -> return done(e) if e) )
-        @publish.bad({
+        }, true)
+        P.publish.bad({
           kingdom: "Animalia"
           phylum: "Chordata"
           class: "Mammalia"
@@ -223,3 +227,4 @@ describe "Publisher", ()  ->
           species: "sapiens"
           id: i
         })
+    )
