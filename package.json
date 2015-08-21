@@ -1,0 +1,39 @@
+{
+    "private": true,
+    "name": "amqp-pool",
+    "version": "0.0.0",
+    "description": "Go swimming in the AMQP Pool",
+    "keywords": [
+        "amqp"
+    ],
+    "main": "js/index.js",
+    "files": [
+        "js/",
+        "README.md",
+        "LICENSE"
+    ],
+    "scripts": {
+        "prepublish": "./node_modules/.bin/coffee -o js -c src",
+        "pretest": "./node_modules/.bin/coffee -o js -c src",
+        "test": "./node_modules/.bin/mocha js/test.js"
+    },
+    "dependencies": {
+        "amqplib": "^0.3.2",
+        "generic-pool": "^2.2.0",
+        "lodash": "^3.10.1",
+        "mustache": "^1.2.0"
+    },
+    "devDependencies": {
+        "async": "^1.4.2",
+        "coffee-script": "^1.9.3",
+        "mocha": "^2.2.5",
+        "should": "^7.0.4"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/typeduck/amqp-pool.git"
+    },
+    "bugs": "https://github.com/typeduck/amqp-pool/issues",
+    "author": "Ruquay K Calloway",
+    "license": "MIT"
+}
