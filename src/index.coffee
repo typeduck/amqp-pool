@@ -4,4 +4,8 @@
 
 Connection = require("./Connection")
 
-module.exports = (specs) -> return new Connection(specs)
+module.exports = (specs) -> new Connection(specs)
+
+module.exports.ChannelPool = require("./ChannelPool")
+module.exports.Publisher = require("./Publisher")
+module.exports.Consumer = require("./Consumer")

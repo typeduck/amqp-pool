@@ -3,8 +3,10 @@
 ###############################################################################
 
 When = require("when")
-Syntax = require("./Syntax")
 Route = require("./Route")
+
+# Used for variable replacement
+rxTemplate = /\{\{([^}]+)\}\}/g
 
 consumerId = 0
 
@@ -23,7 +25,7 @@ module.exports = class Consumer
       @dynamicQueue ?= ch.assertQueue("", qOpts)
       @dynamicQueue.then((ok) =>
         sOpts = {noAck: true}
-        ch.consume(ok.queue, @callMethod.bind(@), sOpts)
+        ch.consume(ok.queue, @callMethod.bind(@, ch), sOpts)
       ).then((sub) =>
         @subscriptions.push(sub)
       )
@@ -38,25 +40,24 @@ module.exports = class Consumer
       # TODO: Consumer routes should not allow templates!
       exchange = route.exchangeTemplate()
       route = route.routeTemplate()
-      if Syntax.Template.test(route)
+      if rxTemplate.test(route)
         throw new Error("Invalid consumption route '#{route}'")
       # Queue: subscribe directly to it
       if not exchange
-        return ch.consume(route, @callMethod.bind(@)).then((sub) =>
+        return ch.consume(route, @callMethod.bind(@, ch)).then((sub) =>
           @subscriptions.push(sub)
         )
       # It is an exchange, create/bind Queue
-      if Syntax.Template.test(exchange)
+      if rxTemplate.test(exchange)
         throw new Error("Invalid Exchange '#{exchange}'")
-      return @dynamic().then((ok) =>
+      return @dynamic().then((ok) ->
         ch.bindQueue(ok.queue, exchange, route)
       )
     )
 
   # Wrapper for the method call
-  callMethod: (msg) ->
+  callMethod: (ch, msg) ->
     return if not (props = msg?.properties) or not (fields = msg.fields)
-    #console.log("Connection %s; Consumer %s; Channel %s, cTag %s; delivery %s", @pool.connectionId, @id, @channel.ch, fields.consumerTag, fields.deliveryTag)
     try
       if props.contentType is "application/json"
         msg.json = JSON.parse(msg.content.toString(msg.contentEncoding || "UTF-8"))

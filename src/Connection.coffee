@@ -11,6 +11,7 @@ AMQP = require("amqplib")
 ChannelPool = require("./ChannelPool")
 Publisher = require("./Publisher")
 Consumer = require("./Consumer")
+assign = require("lodash.assign")
 
 connectionId = 0
 
@@ -19,9 +20,10 @@ module.exports = class Connection
     @id = ++connectionId
     @url = @specs.server || "amqp://guest:guest@localhost"
     @conn = null
-    getConn = () => @connect()
-    @poolConfirm = new ChannelPool(getConn, true)
-    @poolNoConfirm = new ChannelPool(getConn, false)
+    optsC = assign({}, @specs.pool, @specs.certainPool, {confirm: true})
+    @poolConfirm = new ChannelPool(@, optsC)
+    optsNC = assign({}, @specs.pool, @specs.uncertainPool, {confirm: false})
+    @poolNoConfirm = new ChannelPool(@, optsNC)
     @publishers = {}
     @publish = {} # wrapper for named publisher's publish() method
     @consumers = {}
@@ -32,11 +34,11 @@ module.exports = class Connection
   # Adds a publisher template
   addPublisher: (name, spec) ->
     pub = (@publishers[name] ?= new Publisher(@poolNoConfirm, @poolConfirm, spec))
-    @publish[name] ?= (args...) => pub.publish.apply(pub, args)
+    @publish[name] ?= (args...) -> pub.publish.apply(pub, args)
     return pub
   # Adds a consumer method
   addConsumer: (name, spec) ->
-    con = (@consumers[name] = new Consumer(@poolNoConfirm, spec))
+    @consumers[name] = new Consumer(@poolNoConfirm, spec)
   # Connects, sets up listener in case of disconnect
   connect: () -> @conn ?= AMQP.connect(@url)
   disconnect: () ->
@@ -48,7 +50,6 @@ module.exports = class Connection
   activate: () -> When.all((con.activate() for name, con of @consumers))
   # Deactivates Consumers, Publishers, then connection
   deactivate:  () ->
-    console.log("Deactivating Connection %s", @id)
     all = (con.deactivate() for name, con of @consumers)
     all.push(@poolConfirm.drain())
     When.all(all).then(() =>

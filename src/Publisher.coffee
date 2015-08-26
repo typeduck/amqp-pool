@@ -10,8 +10,8 @@ publisherId = 0
 module.exports = class Publisher
   constructor: (@uncertain, @certain, @spec) ->
     @id = ++publisherId
-    @messageId = 0
     @route = null
+    @messageId = 0
     if typeof @spec is "string" then @spec = {route: @spec}
     @setRoute(@spec.route)
   # Sets the publishing route
@@ -41,12 +41,13 @@ module.exports = class Publisher
         channel.publish(exchange, rKey, content, pOpts)
         return pool.release(channel)
       # Confirm Mode: setup error handler/ACK handler. Seems that
-      # amqplib.Channel.publish does NOT offer a Promise-based callback.
-      When.promise (resolve, reject) ->
+      # amqplib.ConfirmChannel.publish is NOT Promise-based.
+      When.promise((resolve, reject) ->
         onDone = (err, ok) ->
           channel.removeListener("error", onDone)
           pool.release(channel)
           if err then reject(err) else resolve(ok)
         channel.publish(exchange, rKey, content, pOpts, onDone)
         channel.on("error", onDone)
+      )
     )

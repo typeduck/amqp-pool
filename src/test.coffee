@@ -142,7 +142,7 @@ describe "Publisher", ()  ->
   # Tests 500 messages
   it "should be able to set up publisher/consumer", (done) ->
     @timeout(5000)
-    maxHumans = 1000
+    maxHumans = 10
     countDown = (maxHumans + 1) * (maxHumans / 2) * 3
     gotMessage = (msg) ->
       o = msg.json
@@ -188,7 +188,8 @@ describe "Publisher", ()  ->
 
   # Test that publishing one bad route does not corrupt another
   it "should multi-route publisher must continue in face of errors",  (done) ->
-    maxAnimals = 2
+    @timeout(5000)
+    maxAnimals = 1000
     countDown = (maxAnimals + 1) * (maxAnimals / 2)
     gotMessage = (msg) ->
       o = msg.json
@@ -207,16 +208,6 @@ describe "Publisher", ()  ->
     })
     P.activate().then(() ->
       for i in [1..maxAnimals]
-        P.publish.life({
-          kingdom: "Animalia"
-          phylum: "Chordata"
-          class: "Mammalia"
-          order: "Primates"
-          family: "Hominadae"
-          genus: "Homo"
-          species: "sapiens"
-          id: i
-        }, true)
         P.publish.bad({
           kingdom: "Animalia"
           phylum: "Chordata"
@@ -227,4 +218,14 @@ describe "Publisher", ()  ->
           species: "sapiens"
           id: i
         })
+        P.publish.life({
+          kingdom: "Animalia"
+          phylum: "Chordata"
+          class: "Mammalia"
+          order: "Primates"
+          family: "Hominadae"
+          genus: "Homo"
+          species: "sapiens"
+          id: i
+        }, true)
     )

@@ -3,11 +3,13 @@
 ###############################################################################
 
 Mustache = require("mustache")
-Syntax = require("./Syntax")
+
+# Used for single-letter flag options
+rxOptions = /\?(\w*)(?:-(\w+))?/
 
 module.exports = class Template
   constructor: (@template, @opts = {}) ->
-    if opts = @template.match(Syntax.Options)
+    if opts = @template.match(rxOptions)
       @template = @template.replace(opts[0], "")
       if (letters = opts[1])
         @opts[k] ?= true for k in letters.split("")

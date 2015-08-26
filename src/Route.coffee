@@ -7,13 +7,18 @@ flatten = require("lodash.flatten")
 clone = require("lodash.clone")
 
 Template = require("./Template")
-Syntax = require("./Syntax")
+
+# Used to determine Exchange+Route (as opposed to Queue)
+rxExchangeRoute = /^([^\/]+)((?:\/[^\/]+)+)$/
+# Used for finding all Routes after Exchange+Route match
+rxRoute = /\/[^\/]+/g
+
 
 module.exports = class Route
   # Can be instantiated with separate Exchange/Route, or slash-separated
   constructor: (exTpl, rkTpl = null) ->
     if not rkTpl?
-      if Syntax.ExchangeRoute.test(exTpl)
+      if rxExchangeRoute.test(exTpl)
         return Route.read(exTpl)[0]
       else
         rkTpl = exTpl
@@ -38,11 +43,11 @@ module.exports = class Route
     args = flatten(args)
     routes = []
     # Interpret the Exchange+Bindings
-    bindings = args.map((s) -> Syntax.ExchangeRoute.exec(s)).filter((s) -> !!s)
+    bindings = args.map((s) -> rxExchangeRoute.exec(s)).filter((s) -> !!s)
     for spec in bindings
-      for route in spec[2].match(Syntax.Route)
+      for route in spec[2].match(rxRoute)
         routes.push(new Route(spec[1], route[1..]))
     # Straight-up Queue
-    queues = args.filter (s) -> ! Syntax.ExchangeRoute.test(s)
+    queues = args.filter (s) -> ! rxExchangeRoute.test(s)
     routes.push(new Route("", q)) for q in queues
     return routes
