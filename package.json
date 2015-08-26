@@ -1,5 +1,4 @@
 {
-    "private": true,
     "name": "amqp-pool",
     "version": "0.0.1",
     "description": "Go swimming in the AMQP Pool",
