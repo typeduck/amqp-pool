@@ -16,7 +16,7 @@
         "test": "./node_modules/.bin/mocha --compilers coffee:coffee-script/register src/test.coffee"
     },
     "dependencies": {
-        "amqplib": "^0.3.2",
+        "amqplib": "^0.4.0",
         "generic-pool": "^2.2.0",
         "lodash.assign": "^3.2.0",
         "lodash.clone": "^3.0.3",
@@ -26,9 +26,9 @@
         "when": "^3.7.3"
     },
     "devDependencies": {
-        "coffee-script": "^1.9.3",
-        "mocha": "^2.2.5",
-        "should": "^7.0.4"
+        "coffee-script": "^1.10.0",
+        "mocha": "^2.3.2",
+        "should": "^7.1.0"
     },
     "repository": {
         "type": "git",
