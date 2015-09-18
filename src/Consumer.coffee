@@ -60,14 +60,15 @@ module.exports = class Consumer
     return if not (props = msg?.properties) or not (fields = msg.fields)
     try
       if props.contentType is "application/json"
-        msg.json = JSON.parse(msg.content.toString(msg.contentEncoding || "UTF-8"))
+        str = msg.content.toString(props.contentEncoding || "UTF-8")
+        msg.json = JSON.parse(str)
       @spec.method.call(@, msg)
     catch e
       console.error(e, e.stack)
   # Wrappper for the acknowlegement
   ack: (msg) ->
     @connect().then((ch) ->
-      ch.acknowledge(msg)
+      ch.ack(msg)
     )
 
   # Stop consuming, shutdown, release
