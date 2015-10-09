@@ -1,6 +1,6 @@
 {
     "name": "amqp-pool",
-    "version": "0.0.2",
+    "version": "0.0.4",
     "description": "Go swimming in the AMQP Pool",
     "keywords": [
         "amqp"
